@@ -8,6 +8,7 @@ using DoubTech.ThirdParty.OpenAI.Data;
 using DoubTech.ThirdParty.OpenAI.Scripts.Data;
 using Unity.Plastic.Newtonsoft.Json;
 using UnityEditor;
+using UnityEngine.Events;
 
 namespace DoubTech.ThirdParty.OpenAI
 {
@@ -23,35 +24,51 @@ namespace DoubTech.ThirdParty.OpenAI
 
         [SerializeField] private OpenAIServerConfig serverConfig;
 
-        public event Action<string> OnResponseReceived;
+        [Header("Events")]
+        public UnityEvent<string> onPartialResponseReceived = new UnityEvent<string>();
+        public UnityEvent<string> onFullResponseReceived = new UnityEvent<string>();
+
+        private string _currentResponse;
 
         private List<Message> _messageHistory = new List<Message>();
+        private CompletionRequest _requestData;
+
+        public Message[] MessageHistory
+        {
+            get
+            {
+                
+                // Combine base prompt messages, messages, and a new message for prompt
+                var allMessages = new List<Message>();
+                if (basePrompt != null)
+                {
+                    allMessages.AddRange(basePrompt.messages);
+                }
+
+                if (messages != null)
+                {
+                    allMessages.AddRange(messages);
+                }
+
+                allMessages.AddRange(_messageHistory);
+                return allMessages.ToArray();
+            }
+        }
 
         public void Prompt(string prompt)
         {
-            // Combine base prompt messages, messages, and a new message for prompt
-            var allMessages = new List<Message>();
-            if (basePrompt != null)
-            {
-                allMessages.AddRange(basePrompt.messages);
-            }
-
-            if (messages != null)
-            {
-                allMessages.AddRange(messages);
-            }
-
-            allMessages.Add(new Message
+            _messageHistory.Add(new Message
             {
                 role = "user",
                 content = prompt
             });
-            var requestData = new CompletionRequest
+            
+            _requestData = new CompletionRequest
             {
                 model = model,
-                messages = allMessages.ToArray()
+                messages = MessageHistory
             };
-            var postData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(requestData));
+            var postData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(_requestData));
 
             var request = new UnityWebRequest(serverConfig.GetUrl("/v1/chat/completions"), "POST")
             {
@@ -67,6 +84,7 @@ namespace DoubTech.ThirdParty.OpenAI
 
         IEnumerator SendRequest(UnityWebRequest request)
         {
+            _currentResponse = "";
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.ConnectionError ||
@@ -74,6 +92,17 @@ namespace DoubTech.ThirdParty.OpenAI
             {
                 Debug.LogError(request.error);
             }
+            
+            while(!request.isDone)
+            {
+                yield return null;
+            }
+            _messageHistory.Add(new Message
+            {
+                role = "assistant",
+                content = _currentResponse
+            });
+            onFullResponseReceived?.Invoke(_currentResponse);
         }
 
         private void OnDataReceived(byte[] data)
@@ -83,8 +112,64 @@ namespace DoubTech.ThirdParty.OpenAI
             var jsonBlobs = text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var blob in jsonBlobs)
             {
-                OnResponseReceived?.Invoke(blob);
-                Debug.Log(blob);
+                if (!_requestData.stream) HandleFullData(blob);
+                else HandleStreamedData(blob);
+            }
+        }
+
+        private void HandleStreamedData(string blob)
+        {
+            try
+            {
+                ChatCompletionChunk completion;
+                if (blob.StartsWith("data: "))
+                {
+                    var json = blob.Substring(6);
+                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+                }
+                else
+                {
+                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
+                }
+
+                if (null != completion)
+                {
+                    _currentResponse += completion.Choices[0].Message.content;
+                    onPartialResponseReceived?.Invoke(_currentResponse);
+                    Debug.Log(_currentResponse);
+                }
+            }
+            catch (JsonReaderException)
+            {
+                // Ignore incomplete JSON blobs
+            }
+        }
+
+        private void HandleFullData(string blob)
+        {
+            try
+            {
+                Completion completion;
+                if (blob.StartsWith("data: "))
+                {
+                    var json = blob.Substring(6);
+                    completion = JsonConvert.DeserializeObject<Completion>(json);
+                }
+                else
+                {
+                    completion = JsonConvert.DeserializeObject<Completion>(blob);
+                }
+
+                if (null != completion)
+                {
+                    _currentResponse += completion.Message.content;
+                    onPartialResponseReceived?.Invoke(_currentResponse);
+                    Debug.Log(_currentResponse);
+                }
+            }
+            catch (JsonReaderException)
+            {
+                // Ignore incomplete JSON blobs
             }
         }
 
@@ -131,6 +216,15 @@ namespace DoubTech.ThirdParty.OpenAI
             if (GUILayout.Button("Submit Prompt"))
             {
                 streamingAPI.Prompt(_prompt);
+            }
+            
+            GUILayout.Space(16);
+            EditorGUILayout.LabelField("Conversation History", EditorStyles.boldLabel);
+            // Display text areas for all of the messages in the conversation history
+            foreach (var message in streamingAPI.MessageHistory)
+            {
+                GUILayout.Label(message.role);
+                EditorGUILayout.TextArea(message.content);
             }
         }
     }
