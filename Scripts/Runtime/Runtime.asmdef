@@ -1,6 +1,6 @@
 {
-    "name": "",
-    "rootNamespace": "",
+    "name": "DoubTech.ThirdParty.OpenAI",
+    "rootNamespace": "DoubTech.ThirdParty.OpenAI",
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

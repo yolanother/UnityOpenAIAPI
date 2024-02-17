@@ -1,6 +1,6 @@
 {
-    "name": "",
-    "rootNamespace": "",
+    "name": "DoubTech.ThirdParty.OpenAI.Editor",
+    "rootNamespace": "DoubTech.ThirdParty.OpenAI",
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
