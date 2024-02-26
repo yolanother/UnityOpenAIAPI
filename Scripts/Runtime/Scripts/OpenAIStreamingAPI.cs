@@ -9,6 +9,7 @@ using DoubTech.ThirdParty.OpenAI.Scripts.Data;
 using Unity.Plastic.Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine.Events;
+using UnityEngine.UI;
 
 namespace DoubTech.ThirdParty.OpenAI
 {
@@ -34,6 +35,7 @@ namespace DoubTech.ThirdParty.OpenAI
 
         private List<Message> _messageHistory = new List<Message>();
         private CompletionRequest _requestData;
+        private Message _partialPrompt;
 
         public Message[] MessageHistory
         {
@@ -57,14 +59,49 @@ namespace DoubTech.ThirdParty.OpenAI
             }
         }
 
+        public void PartialPrompt(string prompt)
+        {
+            if (string.IsNullOrEmpty(prompt)) return;
+            if (null == _partialPrompt)
+            {
+                _partialPrompt = new Message()
+                {
+                    role = "user",
+                    content = prompt
+                };
+                _messageHistory.Add(_partialPrompt);
+            }
+
+            _partialPrompt.content = prompt;
+            Submit();
+        }
+
         public void Prompt(string prompt)
         {
-            _messageHistory.Add(new Message
+            if (null != _partialPrompt && prompt == _partialPrompt.content)
             {
-                role = "user",
-                content = prompt
-            });
-            
+                _partialPrompt = null;
+                return;
+            }
+
+            if (null == _partialPrompt)
+            {
+                _messageHistory.Add(new Message
+                {
+                    role = "user",
+                    content = prompt
+                });
+            }
+            else
+            {
+                _partialPrompt = null;
+            }
+
+            Submit();
+        }
+
+        private void Submit()
+        {
             _requestData = new CompletionRequest
             {
                 model = model,
@@ -82,6 +119,7 @@ namespace DoubTech.ThirdParty.OpenAI
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + serverConfig.apiKey);
 
+            StopAllCoroutines();
             StartCoroutine(SendRequest(request));
         }
 
@@ -167,7 +205,7 @@ namespace DoubTech.ThirdParty.OpenAI
 
                 if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
                 {
-                    _currentResponse += completion.Choices[0].Message.content;
+                    _currentResponse = completion.Choices[0].Message.content;
                     onPartialResponseReceived?.Invoke(_currentResponse);
                 }
             }
