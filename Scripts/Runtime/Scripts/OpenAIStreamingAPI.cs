@@ -22,6 +22,8 @@ namespace DoubTech.ThirdParty.OpenAI
         [Header("Server Config")] [Models(nameof(serverConfig))] [SerializeField]
         private string model;
 
+        [SerializeField] private bool stream;
+
         [SerializeField] private OpenAIServerConfig serverConfig;
 
         [Header("Events")]
@@ -66,7 +68,8 @@ namespace DoubTech.ThirdParty.OpenAI
             _requestData = new CompletionRequest
             {
                 model = model,
-                messages = MessageHistory
+                messages = MessageHistory,
+                stream = stream
             };
             var postData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(_requestData));
 
@@ -103,6 +106,7 @@ namespace DoubTech.ThirdParty.OpenAI
                 content = _currentResponse
             });
             onFullResponseReceived?.Invoke(_currentResponse);
+            Debug.Log(_currentResponse);
         }
 
         private void OnDataReceived(byte[] data)
@@ -124,6 +128,7 @@ namespace DoubTech.ThirdParty.OpenAI
                 ChatCompletionChunk completion;
                 if (blob.StartsWith("data: "))
                 {
+                    Debug.Log(blob);
                     var json = blob.Substring(6);
                     completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
                 }
@@ -132,11 +137,10 @@ namespace DoubTech.ThirdParty.OpenAI
                     completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
                 }
 
-                if (null != completion)
+                if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
                 {
                     _currentResponse += completion.Choices[0].Message.content;
                     onPartialResponseReceived?.Invoke(_currentResponse);
-                    Debug.Log(_currentResponse);
                 }
             }
             catch (JsonReaderException)
@@ -147,29 +151,51 @@ namespace DoubTech.ThirdParty.OpenAI
 
         private void HandleFullData(string blob)
         {
-            try
+            if (blob.Contains("\"choices\""))
             {
-                Completion completion;
+                ChatCompletionChunk completion;
                 if (blob.StartsWith("data: "))
                 {
+                    Debug.Log(blob);
                     var json = blob.Substring(6);
-                    completion = JsonConvert.DeserializeObject<Completion>(json);
+                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
                 }
                 else
                 {
-                    completion = JsonConvert.DeserializeObject<Completion>(blob);
+                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
                 }
 
-                if (null != completion)
+                if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
                 {
-                    _currentResponse += completion.Message.content;
+                    _currentResponse += completion.Choices[0].Message.content;
                     onPartialResponseReceived?.Invoke(_currentResponse);
-                    Debug.Log(_currentResponse);
                 }
             }
-            catch (JsonReaderException)
+            else
             {
-                // Ignore incomplete JSON blobs
+                try
+                {
+                    Completion completion;
+                    if (blob.StartsWith("data: "))
+                    {
+                        var json = blob.Substring(6);
+                        completion = JsonConvert.DeserializeObject<Completion>(json);
+                    }
+                    else
+                    {
+                        completion = JsonConvert.DeserializeObject<Completion>(blob);
+                    }
+
+                    if (null != completion)
+                    {
+                        _currentResponse += completion.Message.content;
+                        onFullResponseReceived?.Invoke(_currentResponse);
+                    }
+                }
+                catch (JsonReaderException)
+                {
+                    // Ignore incomplete JSON blobs
+                }
             }
         }
 
