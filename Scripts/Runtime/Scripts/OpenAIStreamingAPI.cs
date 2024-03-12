@@ -3,13 +3,13 @@ using UnityEngine.Networking;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using DoubTech.ThirdParty.OpenAI.Data;
 using DoubTech.ThirdParty.OpenAI.Scripts.Data;
-using Unity.Plastic.Newtonsoft.Json;
+using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine.Events;
-using UnityEngine.UI;
 
 namespace DoubTech.ThirdParty.OpenAI
 {
@@ -113,7 +113,7 @@ namespace DoubTech.ThirdParty.OpenAI
             var request = new UnityWebRequest(serverConfig.GetUrl("/v1/chat/completions"), "POST")
             {
                 uploadHandler = new UploadHandlerRaw(postData),
-                downloadHandler = new StreamingDownloadHandler(OnDataReceived),
+                downloadHandler = new StreamingDownloadHandler(OnDataReceived, stream),
                 method = UnityWebRequest.kHttpVerbPOST
             };
             request.SetRequestHeader("Content-Type", "application/json");
@@ -192,21 +192,28 @@ namespace DoubTech.ThirdParty.OpenAI
             if (blob.Contains("\"choices\""))
             {
                 ChatCompletionChunk completion;
-                if (blob.StartsWith("data: "))
+                try
                 {
-                    Debug.Log(blob);
-                    var json = blob.Substring(6);
-                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
-                }
-                else
-                {
-                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
-                }
+                    if (blob.StartsWith("data: "))
+                    {
+                        Debug.Log(blob);
+                        var json = blob.Substring(6);
+                        completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+                    }
+                    else
+                    {
+                        completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
+                    }
 
-                if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
+                    if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
+                    {
+                        _currentResponse = completion.Choices[0].Message.content;
+                        onPartialResponseReceived?.Invoke(_currentResponse);
+                    }
+                }
+                catch (JsonReaderException e)
                 {
-                    _currentResponse = completion.Choices[0].Message.content;
-                    onPartialResponseReceived?.Invoke(_currentResponse);
+                    Debug.LogError($"Error parsing response. {e.Message}\n\n{blob}");
                 }
             }
             else
@@ -240,10 +247,15 @@ namespace DoubTech.ThirdParty.OpenAI
         private class StreamingDownloadHandler : DownloadHandlerScript
         {
             private Action<byte[]> onDataReceived;
+            private MemoryStream _buffer;
 
-            public StreamingDownloadHandler(Action<byte[]> onDataReceivedCallback) : base(new byte[1024])
+            public StreamingDownloadHandler(Action<byte[]> onDataReceivedCallback, bool chunk) : base(new byte[1024])
             {
                 onDataReceived = onDataReceivedCallback;
+                if (!chunk)
+                {
+                    _buffer = new MemoryStream();
+                }
             }
 
             protected override bool ReceiveData(byte[] data, int dataLength)
@@ -253,11 +265,28 @@ namespace DoubTech.ThirdParty.OpenAI
                     return false;
                 }
 
-                var dataCopy = new byte[dataLength];
-                Buffer.BlockCopy(data, 0, dataCopy, 0, dataLength);
-                onDataReceived?.Invoke(dataCopy);
+                if (null != _buffer)
+                {
+                    _buffer.Write(data, 0, dataLength);
+                }
+                else
+                {
+                    // TODO: Handle chunked data that is > one receive.
+                    var dataCopy = new byte[dataLength];
+                    Buffer.BlockCopy(data, 0, dataCopy, 0, dataLength);
+                    onDataReceived?.Invoke(dataCopy);
+                }
 
                 return true;
+            }
+
+            protected override void CompleteContent()
+            {
+                base.CompleteContent();
+                if (null != _buffer)
+                {
+                    onDataReceived?.Invoke(_buffer.GetBuffer());
+                }
             }
         }
     }

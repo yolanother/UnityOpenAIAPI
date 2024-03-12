@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using DoubTech.ThirdParty.OpenAI.Data;
-using Unity.Plastic.Newtonsoft.Json;
+using Newtonsoft.Json;
 
 namespace DoubTech.ThirdParty.OpenAI.Scripts.Data
 {
