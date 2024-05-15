@@ -150,6 +150,12 @@ namespace DoubTech.ThirdParty.OpenAI
         private void OnDataReceived(byte[] data)
         {
             var text = Encoding.UTF8.GetString(data);
+            if (!stream)
+            {
+                HandleFullData(text);
+                return;
+            }
+
             // Assuming the API sends newline-delimited JSON blobs
             var jsonBlobs = text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var blob in jsonBlobs)
@@ -168,6 +174,12 @@ namespace DoubTech.ThirdParty.OpenAI
                 {
                     Debug.Log(blob);
                     var json = blob.Substring(6);
+                    if (json == "[DONE]")
+                    {
+                        Debug.Log("TODO: Handle [Done]");
+                        return;
+                    }
+
                     completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
                 }
                 else
@@ -175,7 +187,8 @@ namespace DoubTech.ThirdParty.OpenAI
                     completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
                 }
 
-                if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
+                if (null != completion && null != completion.Choices && completion.Choices.Count > 0 &&
+                    null != completion.Choices[0] && null != completion.Choices[0].Message)
                 {
                     _currentResponse += completion.Choices[0].Message.content;
                     onPartialResponseReceived?.Invoke(_currentResponse);
@@ -184,6 +197,10 @@ namespace DoubTech.ThirdParty.OpenAI
             catch (JsonReaderException)
             {
                 // Ignore incomplete JSON blobs
+            }
+            catch (JsonSerializationException e)
+            {
+                Debug.Log($"Bad json syntax: \n{blob}");
             }
         }
 
