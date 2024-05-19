@@ -9,5 +9,6 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false
+    "noEngineReferences": false,
+    "references":[ "GUID:233153e89954a6244b31d5555462d524" ]
 }

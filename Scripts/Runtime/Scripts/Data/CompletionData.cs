@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using DoubTech.ThirdParty.OpenAI.Data;
+using DoubTech.ThirdParty.AI.Common;
 using Newtonsoft.Json;
 
 namespace DoubTech.ThirdParty.OpenAI.Scripts.Data

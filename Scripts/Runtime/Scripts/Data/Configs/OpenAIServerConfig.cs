@@ -9,7 +9,7 @@ using UnityEngine.Networking;
 
 namespace DoubTech.ThirdParty.OpenAI
 {
-    [CreateAssetMenu(fileName = "OpenAIServerConfig", menuName = "DoubTech/Third Party/OpenAI/Server Config", order = 0)]
+    [CreateAssetMenu(fileName = "OpenAI Config", menuName = "DoubTech/AI APIs/Config/OpenAI", order = 0)]
     public class OpenAIServerConfig : ScriptableObject
     {
         const string DEFAULT_HOST = "https://api.openai.com";
