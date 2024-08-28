@@ -1,231 +1,83 @@
 ﻿using UnityEngine;
-using UnityEngine.Networking;
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
-using DoubTech.ThirdParty.OpenAI.Data;
+using DoubTech.ThirdParty.AI.Common;
+using DoubTech.ThirdParty.AI.Common.Data;
 using DoubTech.ThirdParty.OpenAI.Scripts.Data;
 using Newtonsoft.Json;
 using UnityEditor;
-using UnityEngine.Events;
 
 namespace DoubTech.ThirdParty.OpenAI
 {
-    public class OpenAIStreamingAPI : MonoBehaviour
+    public class OpenAIStreamingAPI : BaseAIStreamingAPI
     {
-        [Header("Prompt Config")] [SerializeField]
-        private BasePrompt basePrompt;
-
-        [SerializeField] private Message[] messages;
-
-        [Header("Server Config")] [Models(nameof(serverConfig))] [SerializeField]
-        private string model;
-
-        [SerializeField] private bool stream;
-
-        [SerializeField] private OpenAIServerConfig serverConfig;
-
-        [Header("Events")]
-        public UnityEvent<string> onPartialResponseReceived = new UnityEvent<string>();
-        public UnityEvent<string> onFullResponseReceived = new UnityEvent<string>();
-
-        private string _currentResponse;
-
-        private List<Message> _messageHistory = new List<Message>();
-        private CompletionRequest _requestData;
-        private Message _partialPrompt;
-
-        public Message[] MessageHistory
+        protected override object OnPrepareData(Request requestData)
         {
-            get
+            return new CompletionRequest
             {
-                
-                // Combine base prompt messages, messages, and a new message for prompt
-                var allMessages = new List<Message>();
-                if (basePrompt != null)
-                {
-                    allMessages.AddRange(basePrompt.messages);
-                }
-
-                if (messages != null)
-                {
-                    allMessages.AddRange(messages);
-                }
-
-                allMessages.AddRange(_messageHistory);
-                return allMessages.ToArray();
-            }
+                model = Model,
+                messages = MessageHistory,
+                stream = Stream
+            };
         }
 
-        public void PartialPrompt(string prompt)
+        protected override string[] OnGetRequestPath() => new[]
         {
-            if (string.IsNullOrEmpty(prompt)) return;
-            if (null == _partialPrompt)
-            {
-                _partialPrompt = new Message()
-                {
-                    role = "user",
-                    content = prompt
-                };
-                _messageHistory.Add(_partialPrompt);
-            }
+            "chat",
+            "completions"
+        };
 
-            _partialPrompt.content = prompt;
-            Submit();
-        }
-
-        public void Prompt(string prompt)
+        protected override Response OnHandleStreamedResponse(string blob, Response currentResponse)
         {
-            if (null != _partialPrompt && prompt == _partialPrompt.content)
+            Response resultResponse = null;
+            ChatCompletionChunk completion;
+            if (blob.StartsWith("data: "))
             {
-                _partialPrompt = null;
-                return;
-            }
-
-            if (null == _partialPrompt)
-            {
-                _messageHistory.Add(new Message
+                Debug.Log(blob);
+                var json = blob.Substring(6);
+                if (json == "[DONE]")
                 {
-                    role = "user",
-                    content = prompt
-                });
+                    Debug.Log("TODO: Handle [Done]");
+                    return null;
+                }
+
+                completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
             }
             else
             {
-                _partialPrompt = null;
+                completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
             }
 
-            Submit();
-        }
-
-        private void Submit()
-        {
-            _requestData = new CompletionRequest
+            if (null != completion && null != completion.Choices && completion.Choices.Count > 0 &&
+                null != completion.Choices[0] && null != completion.Choices[0].Message)
             {
-                model = model,
-                messages = MessageHistory,
-                stream = stream
-            };
-            var postData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(_requestData));
-
-            var request = new UnityWebRequest(serverConfig.GetUrl("/v1/chat/completions"), "POST")
-            {
-                uploadHandler = new UploadHandlerRaw(postData),
-                downloadHandler = new StreamingDownloadHandler(OnDataReceived, stream),
-                method = UnityWebRequest.kHttpVerbPOST
-            };
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.SetRequestHeader("Authorization", "Bearer " + serverConfig.apiKey);
-
-            StopAllCoroutines();
-            StartCoroutine(SendRequest(request));
-        }
-
-        IEnumerator SendRequest(UnityWebRequest request)
-        {
-            _currentResponse = "";
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.ConnectionError ||
-                request.result == UnityWebRequest.Result.ProtocolError)
-            {
-                Debug.LogError(request.error);
+                currentResponse.response += completion.Choices[0].Message.content;
+                resultResponse = currentResponse;
             }
             
-            while(!request.isDone)
-            {
-                yield return null;
-            }
-            _messageHistory.Add(new Message
-            {
-                role = "assistant",
-                content = _currentResponse
-            });
-            onFullResponseReceived?.Invoke(_currentResponse);
-            Debug.Log(_currentResponse);
+            return resultResponse;
         }
 
-        private void OnDataReceived(byte[] data)
+        protected override Response OnHandleResponse(string blob, Response currentResponse)
         {
-            var text = Encoding.UTF8.GetString(data);
-            if (!stream)
+            Response resultResponse = null;
+            currentResponse.rawResponse = blob;
+            var json = blob;
+            if (blob.StartsWith("data: "))
             {
-                HandleFullData(text);
-                return;
+                Debug.Log(blob);
+                json = blob.Substring(6);
             }
-
-            // Assuming the API sends newline-delimited JSON blobs
-            var jsonBlobs = text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var blob in jsonBlobs)
-            {
-                if (!_requestData.stream) HandleFullData(blob);
-                else HandleStreamedData(blob);
-            }
-        }
-
-        private void HandleStreamedData(string blob)
-        {
-            try
-            {
-                ChatCompletionChunk completion;
-                if (blob.StartsWith("data: "))
-                {
-                    Debug.Log(blob);
-                    var json = blob.Substring(6);
-                    if (json == "[DONE]")
-                    {
-                        Debug.Log("TODO: Handle [Done]");
-                        return;
-                    }
-
-                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
-                }
-                else
-                {
-                    completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
-                }
-
-                if (null != completion && null != completion.Choices && completion.Choices.Count > 0 &&
-                    null != completion.Choices[0] && null != completion.Choices[0].Message)
-                {
-                    _currentResponse += completion.Choices[0].Message.content;
-                    onPartialResponseReceived?.Invoke(_currentResponse);
-                }
-            }
-            catch (JsonReaderException)
-            {
-                // Ignore incomplete JSON blobs
-            }
-            catch (JsonSerializationException e)
-            {
-                Debug.Log($"Bad json syntax: \n{blob}");
-            }
-        }
-
-        private void HandleFullData(string blob)
-        {
+            
             if (blob.Contains("\"choices\""))
             {
-                ChatCompletionChunk completion;
                 try
                 {
-                    if (blob.StartsWith("data: "))
-                    {
-                        Debug.Log(blob);
-                        var json = blob.Substring(6);
-                        completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
-                    }
-                    else
-                    {
-                        completion = JsonConvert.DeserializeObject<ChatCompletionChunk>(blob);
-                    }
+                    var completion = currentResponse.ParseResponse<ChatCompletionChunk>(json);
 
                     if (null != completion && null != completion.Choices && completion.Choices.Count > 0 && null != completion.Choices[0] && null != completion.Choices[0].Message)
                     {
-                        _currentResponse = completion.Choices[0].Message.content;
-                        onPartialResponseReceived?.Invoke(_currentResponse);
+                        currentResponse.response = completion.Choices[0].Message.content;
+                        resultResponse = currentResponse;
                     }
                 }
                 catch (JsonReaderException e)
@@ -237,21 +89,12 @@ namespace DoubTech.ThirdParty.OpenAI
             {
                 try
                 {
-                    Completion completion;
-                    if (blob.StartsWith("data: "))
-                    {
-                        var json = blob.Substring(6);
-                        completion = JsonConvert.DeserializeObject<Completion>(json);
-                    }
-                    else
-                    {
-                        completion = JsonConvert.DeserializeObject<Completion>(blob);
-                    }
+                    Completion completion = JsonConvert.DeserializeObject<Completion>(json);
 
                     if (null != completion)
                     {
-                        _currentResponse += completion.Message.content;
-                        onFullResponseReceived?.Invoke(_currentResponse);
+                        currentResponse.response += completion.Message.content;
+                        resultResponse = currentResponse;
                     }
                 }
                 catch (JsonReaderException)
@@ -259,52 +102,8 @@ namespace DoubTech.ThirdParty.OpenAI
                     // Ignore incomplete JSON blobs
                 }
             }
-        }
-
-        private class StreamingDownloadHandler : DownloadHandlerScript
-        {
-            private Action<byte[]> onDataReceived;
-            private MemoryStream _buffer;
-
-            public StreamingDownloadHandler(Action<byte[]> onDataReceivedCallback, bool chunk) : base(new byte[1024])
-            {
-                onDataReceived = onDataReceivedCallback;
-                if (!chunk)
-                {
-                    _buffer = new MemoryStream();
-                }
-            }
-
-            protected override bool ReceiveData(byte[] data, int dataLength)
-            {
-                if (data == null || dataLength == 0)
-                {
-                    return false;
-                }
-
-                if (null != _buffer)
-                {
-                    _buffer.Write(data, 0, dataLength);
-                }
-                else
-                {
-                    // TODO: Handle chunked data that is > one receive.
-                    var dataCopy = new byte[dataLength];
-                    Buffer.BlockCopy(data, 0, dataCopy, 0, dataLength);
-                    onDataReceived?.Invoke(dataCopy);
-                }
-
-                return true;
-            }
-
-            protected override void CompleteContent()
-            {
-                base.CompleteContent();
-                if (null != _buffer)
-                {
-                    onDataReceived?.Invoke(_buffer.GetBuffer());
-                }
-            }
+            
+            return resultResponse;
         }
     }
     
@@ -333,7 +132,7 @@ namespace DoubTech.ThirdParty.OpenAI
             // Display text areas for all of the messages in the conversation history
             foreach (var message in streamingAPI.MessageHistory)
             {
-                GUILayout.Label(message.role);
+                GUILayout.Label(message.role.ToString());
                 EditorGUILayout.TextArea(message.content);
             }
         }
