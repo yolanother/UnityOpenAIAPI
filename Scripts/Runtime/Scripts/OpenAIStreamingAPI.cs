@@ -1,7 +1,5 @@
 ﻿using UnityEngine;
-using UnityEngine.Networking;
 using System;
-using System.IO;
 using DoubTech.ThirdParty.AI.Common;
 using DoubTech.ThirdParty.AI.Common.Data;
 using DoubTech.ThirdParty.OpenAI.Scripts.Data;
@@ -15,17 +13,18 @@ namespace DoubTech.ThirdParty.OpenAI
         protected override object OnPrepareData(Request requestData)
         {
             return new CompletionRequest
-                        {
-                            model = Model,
-                            messages = MessageHistory,
-                            stream = Stream
-                        };
+            {
+                model = Model,
+                messages = MessageHistory,
+                stream = Stream
+            };
         }
 
-        protected override string[] OnGetRequestPath()
+        protected override string[] OnGetRequestPath() => new[]
         {
-            throw new NotImplementedException();
-        }
+            "chat",
+            "completions"
+        };
 
         protected override Response OnHandleStreamedResponse(string blob, Response currentResponse)
         {

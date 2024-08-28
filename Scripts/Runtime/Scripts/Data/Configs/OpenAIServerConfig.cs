@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
+using DoubTech.ThirdParty.AI.Common.Data;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -10,7 +11,7 @@ using UnityEngine.Networking;
 namespace DoubTech.ThirdParty.OpenAI
 {
     [CreateAssetMenu(fileName = "OpenAI Config", menuName = "DoubTech/AI APIs/Config/OpenAI", order = 0)]
-    public class OpenAIServerConfig : ScriptableObject
+    public class OpenAIServerConfig : ApiConfig, IBearerAuth
     {
         const string DEFAULT_HOST = "https://api.openai.com";
         const string ENDPOINT_MODELS = "/v1/models";
@@ -21,11 +22,15 @@ namespace DoubTech.ThirdParty.OpenAI
         [SerializeField] public string apiKey;
         [SerializeField] public string[] models;
         
-        public string ApiURL => $"{host}/v1/engines/davinci/completions";
+        public string ApiURL => $"{host}/v1";
 
         public string GetUrl(string endpoint) => $"{host}/{endpoint}";
 
-        public async Task RefreshModels()
+        public override string[] Models => models;
+
+        public override string GetUrl(params string[] path) => string.Join("/", ApiURL, string.Join("/", path));
+
+        public override async Task RefreshModels()
         {
             string[] modelEndpoints = new string[]
             {
@@ -74,6 +79,8 @@ namespace DoubTech.ThirdParty.OpenAI
                 return null;
             }
         }
+
+        public string ApiKey => apiKey;
     }
     
     #if UNITY_EDITOR

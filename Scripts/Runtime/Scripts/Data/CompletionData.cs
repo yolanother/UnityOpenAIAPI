@@ -56,6 +56,9 @@ namespace DoubTech.ThirdParty.OpenAI.Scripts.Data
 
         [JsonProperty("usage")]
         public Usage Usage { get; set; }
+        
+        [JsonProperty("error")]
+        public Error Error { get; set; }
     }
     
     public class Delta
@@ -98,5 +101,14 @@ namespace DoubTech.ThirdParty.OpenAI.Scripts.Data
 
         [JsonProperty("choices")]
         public List<Choice> Choices { get; set; }
+        
+        [JsonProperty("error")]
+        public Error Error { get; set; }
+    }
+
+    public class Error
+    {
+        public string message { get; set; }
+        public string type { get; set; }
     }
 }
