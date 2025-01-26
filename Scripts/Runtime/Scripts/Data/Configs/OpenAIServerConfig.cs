@@ -17,14 +17,19 @@ namespace DoubTech.ThirdParty.OpenAI
         const string ENDPOINT_MODELS = "/v1/models";
         const string ENDPOINT_INTERNAL_MODELS = "/v1/internal/model/list";
         
+        [Header("Endpoint Configuration")]
         [SerializeField] private string host = DEFAULT_HOST;
+        [SerializeField] private string apiEndpoint = "/v1";
+        [SerializeField] private string modelsEndpoint = "/models";
+        [SerializeField] private string internalModelsEndpoint = "/internal/model/list";
+        
         [Password]
         [SerializeField] public string apiKey;
         [SerializeField] public string[] models;
         
-        public string ApiURL => $"{host}/v1";
+        public string ApiURL => $"{host}/{apiEndpoint}";
 
-        public string GetUrl(string endpoint) => $"{host}/{endpoint}";
+        public string GetUrl(string endpoint) => $"{host.Trim('/')}/{apiEndpoint.Trim('/')}/{endpoint.Trim('/')}";
 
         public override string[] Models => models;
 
@@ -34,18 +39,20 @@ namespace DoubTech.ThirdParty.OpenAI
         {
             string[] modelEndpoints = new string[]
             {
-                ENDPOINT_MODELS,
-                ENDPOINT_INTERNAL_MODELS
+                modelsEndpoint,
+                internalModelsEndpoint
             };
             
             List<string> modelNames = new List<string>();
             // Try to get the models
             foreach (var endpoint in modelEndpoints)
             {
-                string response = await GetDataAsync(GetUrl(endpoint));
+                var url = GetUrl(endpoint);
+                Debug.Log("AARON: url: " + url);
+                string response = await GetDataAsync(url);
                 if (!string.IsNullOrEmpty(response))
                 {
-                    var models = endpoint == ENDPOINT_MODELS
+                    var models = endpoint == modelsEndpoint
                         ? ModelData.GetModelNames(response)
                         : ModelCollection.ExtractModelNames(response);
                     if (null != models)

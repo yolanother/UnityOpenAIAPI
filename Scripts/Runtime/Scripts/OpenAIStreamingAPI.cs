@@ -15,7 +15,7 @@ namespace DoubTech.ThirdParty.OpenAI
             return new CompletionRequest
             {
                 model = Model,
-                messages = MessageHistory,
+                messages = requestData.messages,
                 stream = Stream
             };
         }
