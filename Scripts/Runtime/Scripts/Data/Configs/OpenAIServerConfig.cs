@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using DoubTech.ThirdParty.AI.Common.Data;
+using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -37,32 +38,47 @@ namespace DoubTech.ThirdParty.OpenAI
 
         public override async Task RefreshModels()
         {
-            string[] modelEndpoints = new string[]
+            try
             {
-                modelsEndpoint,
-                internalModelsEndpoint
-            };
-            
-            List<string> modelNames = new List<string>();
-            // Try to get the models
-            foreach (var endpoint in modelEndpoints)
-            {
-                var url = GetUrl(endpoint);
-                Debug.Log("AARON: url: " + url);
-                string response = await GetDataAsync(url);
-                if (!string.IsNullOrEmpty(response))
+                string[] modelEndpoints = new string[]
                 {
-                    var models = endpoint == modelsEndpoint
-                        ? ModelData.GetModelNames(response)
-                        : ModelCollection.ExtractModelNames(response);
-                    if (null != models)
+                    modelsEndpoint,
+                    internalModelsEndpoint
+                };
+
+                List<string> modelNames = new List<string>();
+                // Try to get the models
+                foreach (var endpoint in modelEndpoints)
+                {
+                    var url = GetUrl(endpoint);
+                    Debug.Log("AARON: url: " + url);
+                    string response = await GetDataAsync(url);
+                    if (!string.IsNullOrEmpty(response))
                     {
-                        modelNames.AddRange(models);
+                        try
+                        {
+                            var models = endpoint == modelsEndpoint
+                                ? ModelData.GetModelNames(response)
+                                : ModelCollection.ExtractModelNames(response);
+                            if (null != models)
+                            {
+                                modelNames.AddRange(models);
+                            }
+                        }
+                        catch (JsonReaderException e)
+                        {
+                            Debug.LogWarning(e);
+                            Debug.LogWarning(response);
+                        }
                     }
                 }
-            }
 
-            models = modelNames.ToArray();
+                models = modelNames.ToArray();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+            }
         }
         
         public async Task<string> GetDataAsync(string url)
