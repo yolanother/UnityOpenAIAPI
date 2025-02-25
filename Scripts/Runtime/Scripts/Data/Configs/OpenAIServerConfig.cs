@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using DoubTech.ThirdParty.AI.Common.Data;
+using DoubTech.ThirdParty.AI.Common.Utilities;
 using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
@@ -116,7 +117,7 @@ namespace DoubTech.ThirdParty.OpenAI
             OpenAIServerConfig config = (OpenAIServerConfig) target;
             if (GUILayout.Button("Refresh Models"))
             {
-                _ = config.RefreshModels();
+                config.RefreshModels().HandleErrors();
             }
         }
     }

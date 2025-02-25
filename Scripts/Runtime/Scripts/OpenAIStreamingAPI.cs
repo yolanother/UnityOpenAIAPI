@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using System;
 using DoubTech.ThirdParty.AI.Common;
 using DoubTech.ThirdParty.AI.Common.Data;
 using DoubTech.ThirdParty.OpenAI.Scripts.Data;
@@ -109,7 +108,7 @@ namespace DoubTech.ThirdParty.OpenAI
     
     #if UNITY_EDITOR
     [CustomEditor(typeof(OpenAIStreamingAPI))]
-    public class OpenAIStreamingAPIEditor : UnityEditor.Editor
+    public class OpenAIStreamingAPIEditor : Editor
     {
         private string _prompt;
         
